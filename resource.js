@@ -6,8 +6,7 @@ redis = require("./redisConnect");
 
 // I am not going to code this class Resource fully but just give an outline
 // Each kind of resource is treated conceptually like an RDBMS relation (table) or a
-// 
-MongoBD collection.Unfortunately redis has just one key store per database
+// MongoBD collection.Unfortunately redis has just one key store per database
 // and I am not going to go the way of multiple redis databases, since that is
 // overkill. A way around this is to prepend the keys with a namespace string that
 // signifies the collection. This is done inside the methods of the RedisConnector class

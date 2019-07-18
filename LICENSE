@@ -1,0 +1,11 @@
+* All code here is under:
+  Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+  http://creativecommons.org/licenses/by-sa/4.0/
+
+/**
+ * The code in the file essentials.js is completely inspired by the great github book
+ * Professor Frisby's Mostly Adequate Guide to Functional Programming available at
+ * https://github.com/MostlyAdequate/mostly-adequate-guide
+ * Except a few lines that I changed, all the code is based off the Appendix A
+ * of the book
+ */

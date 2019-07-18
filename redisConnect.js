@@ -271,12 +271,58 @@ const broadcast = obj => {
     JSON.stringify(wrapperObj)
   );
 };
-
-const onMessage = func => {
-  redisChatSubscriberConnection.on("message", (channel, message) => {
+const sendMessage = (to, obj) => {
+  if (!to) {
+    throw new Error(
+      "sendMessage needs a target instance id specified as first arg"
+    );
+  }
+  var wrapperObj = Object.assign(
+    { fromInstance: instanceId, toInstance: to },
+    obj
+  );
+  redisChatPublisherConnection.publish(
+    INTERNAL_CHANNEL,
+    JSON.stringify(wrapperObj)
+  );
+};
+const onMessage = (func, removeFinally) => {
+  let wrapperFunc = (channel, message) => {
     var obj = JSON.parse(message);
-    func.call(null, obj);
-  });
+    var to = obj.toInstance; //If toInstance is falsey then this is a broadcast message
+    if (!to) {
+      //This is a broadcast message
+      return;
+    }
+    try {
+      if (instanceId === to) {
+        func.call(null, obj);
+      }
+    } finally {
+      if (removeFinally) {
+        redisChatSubscriberConnection.removeListener("message", wrapperFunc);
+      }
+    }
+  };
+  redisChatSubscriberConnection.addListener("message", wrapperFunc);
+};
+const onBroadcastMessage = (func, removeFinally) => {
+  let wrapperFunc = (channel, message) => {
+    var obj = JSON.parse(message);
+    var to = obj.toInstance; //If toInstance is falsey then this is a broadcast message
+    if (to) {
+      //This is a point-to-point message
+      return;
+    }
+    try {
+      func.call(null, obj);
+    } finally {
+      if (removeFinally) {
+        redisChatSubscriberConnection.removeListener("message", wrapperFunc);
+      }
+    }
+  };
+  redisChatSubscriberConnection.addListener("message", wrapperFunc);
 };
 module.exports = {
   setInstanceId: id => {
@@ -284,5 +330,7 @@ module.exports = {
   },
   connect: connect,
   broadcast: broadcast,
-  onMessage: onMessage
+  sendMessage: sendMessage,
+  onMessage: onMessage,
+  onBroadcastMessage: onBroadcastMessage
 };

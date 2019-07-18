@@ -96,13 +96,26 @@ describe("redis connection testing", () => {
       );
   });
   it("broadcast a message to the self same instance withe two handlers", done => {
-    redis.onMessage(obj => {
+    redis.onBroadcastMessage(obj => {
       console.log("Received broadcast message is", obj);
     });
-    redis.onMessage(obj => {
+    redis.onBroadcastMessage(obj => {
       console.log("Processing broadcast message with yet another handler", obj);
       done();
-    });
+    }, true);
     redis.broadcast({ cakes: 16, pastries: 64 });
+  });
+  it("Send a message to self", done => {
+    let nTimes = 0;
+    redis.onMessage(obj => {
+      ++nTimes;
+      console.log("Received broadcast message is", obj, "nTimes is", nTimes);
+    }, true); //true means unlink handler after one execution
+    redis.sendMessage("test", { cakes: 9, pastries: 27 });
+    redis.sendMessage("test", { cakes: 9, pastries: 27 }); //This should get ignored
+    setTimeout(() => {
+      expect(nTimes).to.equal(1);
+      done();
+    }, 1000);
   });
 });

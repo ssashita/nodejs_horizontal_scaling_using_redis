@@ -1,2 +1,10 @@
 # nodejs_horizontal_scaling_using_redis
-This provides skeletal code to partition resources between nodejs instances usng redis store and pub/sub as a base
+This provides skeletal code to partition resources between nodejs instances using redis store and pub/sub as a base
+
+## Overview
+Many a time, smooth horizontal scaling of a server process gets hindered by the fact that resources that the server deals with need to be protected from race and other concurrency induced conditions when there are more than one instances of the server accessing and modifying the resource in a store without any kind of synchronization. Synchronization not done properly is itself an invitation to other problems like deadlocks. In any case synchronization slows down things. Fortunately, application domains often lend themselves to allowing a neat partition of their in-store resources between instances, such that it can permit a resource to be 'reserved' for or 'owned' by an instance to the extent that any database write operations and any heavy processing related to that resource are conducted by that instance alone. An example that jumps at us is Stock symbol feed processing, where we have to per force partition stock symbols between instances; otherwise the processing load for all the stocks, given the rate of ticks received from the Stock exchange can overwhelm a single server instance.
+
+## The system we are talking about
+
+
+The above figure shows two Node/Express server instances that receive client requests via a typical Cloud Load balancer. Suppose the request is routed to Instance 1 and the request pertains to resource R. The server 1 first tries to reserve the resource using the reserve method on the the RedisConnector object it is using to access the Redis server. Suppose the reserve is successful, then Server 1 now owns the resource and can start to process it. Otherwise, it publishes a message by calling the broadcast method on the redisConnect module and sends the necessary information in the broadcast. The other server instances (instance 2 only in this case) receive the broadcast since they are already subscribed. Each server instance then typically tries to reserve the resource, but only the one that already owns it will succeed and will further process the request and send the response

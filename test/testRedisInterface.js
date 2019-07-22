@@ -110,28 +110,39 @@ describe("redis connection testing", () => {
   });
   it("Send a message to self", done => {
     let nTimes = 0;
-    redis.onMessage(obj => {
-      ++nTimes;
-      console.log("Received broadcast message is", obj, "nTimes is", nTimes);
-    }, true); //true means unlink handler after one execution
-    redis.sendMessage("test", { cakes: 9, pastries: 27 });
-    redis.sendMessage("test", { cakes: 9, pastries: 27 }); //This should get ignored
+    redis.onMessage(
+      obj => {
+        ++nTimes;
+        console.log("Received  message is", obj, "nTimes is", nTimes);
+      },
+      redis.INTERNAL_CHANNEL,
+      true
+    ); //true means unlink handler after one execution
+    redis.sendMessage("test", redis.INTERNAL_CHANNEL, {
+      cakes: 9,
+      pastries: 27
+    });
+    redis.sendMessage("test", redis.INTERNAL_CHANNEL, {
+      cakes: 9,
+      pastries: 27
+    }); //This should get ignored
     setTimeout(() => {
       expect(nTimes).to.equal(1);
       done();
     }, 1000);
   });
 
-  it("Pre test communication", done => {
+  it("Test communication for horizontal scaling - THIS NEEDS A SERVER TO BE STARTED (type on command line 'PORT=3001 INSTANCE_ID=test2 node routers.js')", done => {
     redis.setInstanceId("test2");
     return redisConnectionResource1
       .reserve("rid2")
       .chain(() => {
         redis.setInstanceId("test");
-        return routers.testInfra("rid2", {
+        return routers.testInfra("rid2", "testInfraChannel", {
           status: code => console.log("status is ", code),
           send: obj => {
             console.log("sending response", obj);
+            expect(obj.status).to.equal(200);
           }
         });
       })
@@ -140,10 +151,13 @@ describe("redis connection testing", () => {
           console.log("test end with ERROR", err);
           setTimeout(done, 4000);
         },
-        requestHandledInThisInstance => {
-          if (requestHandledInThisInstance) {
+        requestHandledLocally => {
+          if (requestHandledLocally) {
             console.log("test end");
+          } else {
+            console.log("test end for remote");
           }
+          expect(requestHandledLocally).to.be.false;
           setTimeout(done, 2000);
         }
       );

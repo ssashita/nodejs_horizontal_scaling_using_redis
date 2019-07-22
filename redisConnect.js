@@ -83,6 +83,9 @@ redisChatPublisherConnection.on("connect", resp => {
   console.log("RedisMessage server connected for redisChatPublisherConnection");
 });
 
+const subscribeChannel = channel => {
+  redisChatSubscriberConnection.subscribe(channel);
+};
 /**
  * Return, creating if necessary, a connection object per namespaceKey,
  * stored in a global Javascript object, redisConnections.
@@ -281,7 +284,7 @@ const broadcast = obj => {
     JSON.stringify(wrapperObj)
   );
 };
-const sendMessage = (to, obj) => {
+const sendMessage = (to, channel, obj) => {
   if (!to) {
     throw new Error(
       "sendMessage needs a target instance id specified as first arg"
@@ -291,13 +294,14 @@ const sendMessage = (to, obj) => {
     { fromInstance: instanceId, toInstance: to },
     obj
   );
-  redisChatPublisherConnection.publish(
-    INTERNAL_CHANNEL,
-    JSON.stringify(wrapperObj)
-  );
+  redisChatPublisherConnection.publish(channel, JSON.stringify(wrapperObj));
 };
-const onMessage = (func, removeFinally) => {
+const onMessage = (func, channelOfInterest, removeFinally) => {
   let wrapperFunc = (channel, message) => {
+    if (channel != channelOfInterest) {
+      console.log("channel", channel, "channelOfInterest", channelOfInterest);
+      return;
+    }
     var instId = getInstanceId();
     console.log("onMessage:", message, "instanceid is", instId);
     var obj = JSON.parse(message);
@@ -322,6 +326,9 @@ const onMessage = (func, removeFinally) => {
 };
 const onBroadcastMessage = (func, removeFinally) => {
   let wrapperFunc = (channel, message) => {
+    if (channel != INTERNAL_CHANNEL) {
+      return;
+    }
     var obj = JSON.parse(message);
     var to = obj.toInstance; //If toInstance is falsey then this is a broadcast message
     if (to) {
@@ -350,5 +357,7 @@ module.exports = {
   broadcast: broadcast,
   sendMessage: sendMessage,
   onMessage: onMessage,
-  onBroadcastMessage: onBroadcastMessage
+  onBroadcastMessage: onBroadcastMessage,
+  INTERNAL_CHANNEL: INTERNAL_CHANNEL,
+  subscribeChannel: subscribeChannel
 };

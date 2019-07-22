@@ -4,7 +4,8 @@ const redis = require("./redisConnect");
 const {
   actionIds,
   doProcessingForResource,
-  registerCallbackHandler
+  registerCallbackHandler,
+  remoteCommunicationChannels
 } = require("./remoteProcessing");
 
 const { curry, Task } = require("./essentials");
@@ -44,6 +45,7 @@ app.post("/save_resource/:rid", (req, resp) => {
     .chain(
       doProcessingForResource(
         //Could be remote or local processing based on if rid could be reserved
+        remoteCommunicationChannels.SAVE_RESOURCE_CHANNEL,
         redisConnectorForResource1,
         rid,
         actionIds.SAVE_RESOURCE,
@@ -78,7 +80,7 @@ const testInfraLocalProcessingFunction = obj => {
   return Task.of(true);
 };
 
-const testInfra = (rid, resp) => {
+const testInfra = (rid, channel, resp) => {
   var obj = { rid: rid };
   //...
   const redisConnectorForResource1 = redis.connect("resource1");
@@ -86,6 +88,7 @@ const testInfra = (rid, resp) => {
   return redisConnectorForResource1.reserve(rid).chain(
     doProcessingForResource(
       //Could be remote or local processing based on if rid could be reserved
+      remoteCommunicationChannels.TEST_INFRA_CHANNEL,
       redisConnectorForResource1,
       rid,
       actionIds.TEST_INFRA,
@@ -99,12 +102,14 @@ const testInfra = (rid, resp) => {
 app.get("/", function(req, resp) {});
 
 registerCallbackHandler(
+  remoteCommunicationChannels.SAVE_RESOURCE_CHANNEL,
   actionIds.SAVE_RESOURCE,
   actionIds.SAVE_RESOURCE_RESPONSE,
   saveResource
 );
 
 registerCallbackHandler(
+  remoteCommunicationChannels.TEST_INFRA_CHANNEL,
   actionIds.TEST_INFRA,
   actionIds.TEST_INFRA_RESPONSE,
   testInfraLocalProcessingFunction

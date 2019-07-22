@@ -8,6 +8,7 @@ redis.setInstanceId(process.env.INSTANCE_ID || "instance 1");
 //const instanceId = redis.getInstanceId();
 
 const doProcessingForResource = curry((
+  channel, //The redis pub sub channel for communication
   redisConnectorForResource, //Resource connector
   rid, //resource id
   action, //id of message action
@@ -27,7 +28,9 @@ const doProcessingForResource = curry((
     "doProcessingForResource called with isReserved value",
     isReserved,
     "and instanceId is",
-    redis.getInstanceId()
+    redis.getInstanceId(),
+    "channel is",
+    channel
   );
   var obj_ = Object.assign(
     { rid: rid },
@@ -53,10 +56,10 @@ const doProcessingForResource = curry((
       console.log("getReserver returned", toInstanceId, "for rid", rid);
       //This isnstance could not reserve the resource, so send message to the owning
       //instance, toInstanceId, to process it
-      redis.sendMessage(toInstanceId, obj_);
+      redis.sendMessage(toInstanceId, channel, obj_);
       //Register a callback for processing the response from the owner instance
       if (!remoteResponseCallbacks[responseAction]) {
-        redis.onMessage(remoteResponseCallback);
+        redis.onMessage(remoteResponseCallback, channel);
         remoteResponseCallbacks[responseAction] = true;
       }
       return Task.of(false);
@@ -68,7 +71,7 @@ const doProcessingForResource = curry((
 });
 
 const remoteProcessingHandler = curry(
-  (action, responseAction, localProcessingfunction, obj) => {
+  (channel, action, responseAction, localProcessingfunction, obj) => {
     console.log(
       "remoteProcessingHandler called for instanceId",
       redis.getInstanceId(),
@@ -91,7 +94,7 @@ const remoteProcessingHandler = curry(
             status: 200,
             action: responseAction
           },
-          respObj
+          result
         );
         return Task.of(respObj);
       })
@@ -99,14 +102,14 @@ const remoteProcessingHandler = curry(
         err => {
           console.log("Sending ERROR message to", obj.fromInstance);
 
-          redis.sendMessage(obj.fromInstance, {
+          redis.sendMessage(obj.fromInstance, channel, {
             error: { code: 400, msg: "Save error" }
           });
         },
         result => {
           console.log("Sending message to", obj.fromInstance);
           //send the respObj as a message for the original instance
-          redis.sendMessage(obj.fromInstance, respObj);
+          redis.sendMessage(obj.fromInstance, channel, respObj);
         }
       );
   }
@@ -116,6 +119,10 @@ const remoteProcessingResponseHandler = curry((resp, obj) => {
   resp.status(obj.status);
   resp.send(obj);
 });
+
+//Communication Channels
+const TEST_INFRA_CHANNEL = "testInfraChannel";
+const SAVE_RESOURCE_CHANNEL = "saveResourceChannel";
 
 //Message Action ids
 const SAVE_RESOURCE = "saveResource";
@@ -127,6 +134,7 @@ const TEST_INFRA_RESPONSE = "testInfraResponse";
 
 //Register Callback handlers
 const registerCallbackHandler = (
+  channel,
   action,
   responseAction,
   localProcessingfunction
@@ -135,10 +143,19 @@ const registerCallbackHandler = (
     "registerCallbackHandler for action",
     action,
     "responseAction",
-    responseAction
+    responseAction,
+    "channel",
+    channel
   );
+  redis.subscribeChannel(channel);
   redis.onMessage(
-    remoteProcessingHandler(action, responseAction, localProcessingfunction)
+    remoteProcessingHandler(
+      channel,
+      action,
+      responseAction,
+      localProcessingfunction
+    ),
+    channel
   );
 };
 
@@ -153,5 +170,6 @@ module.exports = {
     TEST_INFRA,
     TEST_INFRA_RESPONSE
   },
+  remoteCommunicationChannels: { SAVE_RESOURCE_CHANNEL, TEST_INFRA_CHANNEL },
   registerCallbackHandler: registerCallbackHandler
 };

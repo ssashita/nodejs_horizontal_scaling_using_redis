@@ -117,6 +117,7 @@ const getOwner = (redisClient, key) => {
 //iAmOwner::r->k-> Task e
 const iAmOwner = (redisClient, key) => {
   return new Task((fail, succ) => {
+    const instId = getInstanceId();
     redisClient.get(key, function(err, owner) {
       if (err) {
         console.log("iAmOwner - redis Error", err);
@@ -124,15 +125,15 @@ const iAmOwner = (redisClient, key) => {
         return;
       }
       if (owner) {
-        if (!instanceId) {
+        if (!instId) {
           console.log("Error - Unset Instanceid");
           fail("Unset instanceId");
-        } else if (owner == instanceId) {
+        } else if (owner == instId) {
           console.log(
             "Attempting to Lock on",
             key,
             "for instanceId",
-            instanceId,
+            instId,
             "belongs to instanceId (myself)",
             owner
           );
@@ -142,7 +143,7 @@ const iAmOwner = (redisClient, key) => {
             "Attempting to Lock on",
             key,
             "for instanceId",
-            instanceId,
+            instId,
             "belongs to other instanceId",
             owner
           );
@@ -153,7 +154,7 @@ const iAmOwner = (redisClient, key) => {
           "Attempting to Lock on",
           key,
           "for instanceId",
-          instanceId,
+          instId,
           "belongs to none !"
         );
         succ(false);
@@ -180,9 +181,11 @@ class RedisConnector {
   }
   //reserve:: r->Task e
   reserve(resourceId) {
+    const instId = getInstanceId();
     const key = "Lock$" + this.key + "$" + resourceId;
     const redisClient = this.connection;
-    return new Task(reserveTaskFork(key, redisClient, instanceId)).join();
+    console.log("reserving key", key, "for instance", instId);
+    return new Task(reserveTaskFork(key, redisClient, instId)).join();
   }
   //keys:: p-> Task List k
   keys(pattern) {
@@ -233,12 +236,19 @@ class RedisConnector {
 }
 
 //reserveTaskFork::k->redis->r->(fail->succ->Task Task t)
-const reserveTaskFork = (key, redisClient, instanceId) => (fail, succ) => {
-  redisClient.set(key, instanceId, "NX", function(err, response) {
+const reserveTaskFork = (key, redisClient, instId) => (fail, succ) => {
+  redisClient.set(key, instId, "NX", function(err, response) {
     if (err) {
       fail(Task.rejected(err));
       return;
     }
+    console.log(
+      "reserveTaskFork: response is",
+      response,
+      "instanceId is",
+      getInstanceId()
+    );
+
     if (!response) {
       // this could mean that lock already belongs to other instance or to me
       succ(iAmOwner(redisClient, key));
@@ -288,6 +298,8 @@ const sendMessage = (to, obj) => {
 };
 const onMessage = (func, removeFinally) => {
   let wrapperFunc = (channel, message) => {
+    var instId = getInstanceId();
+    console.log("onMessage:", message, "instanceid is", instId);
     var obj = JSON.parse(message);
     var to = obj.toInstance; //If toInstance is falsey then this is a broadcast message
     if (!to) {
@@ -295,8 +307,10 @@ const onMessage = (func, removeFinally) => {
       return;
     }
     try {
-      if (instanceId === to) {
+      if (instId === to) {
         func.call(null, obj);
+      } else {
+        console.log("onMessage: Not meant for this instance");
       }
     } finally {
       if (removeFinally) {
@@ -324,10 +338,14 @@ const onBroadcastMessage = (func, removeFinally) => {
   };
   redisChatSubscriberConnection.addListener("message", wrapperFunc);
 };
+
+const getInstanceId = () => instanceId;
+
 module.exports = {
   setInstanceId: id => {
     instanceId = id;
   },
+  getInstanceId: getInstanceId,
   connect: connect,
   broadcast: broadcast,
   sendMessage: sendMessage,

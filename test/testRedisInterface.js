@@ -1,5 +1,8 @@
 var redis = require("../redisConnect");
 var expect = require("chai").expect;
+var cp = require("child_process");
+var routers = require("../routers");
+var { Task } = require("../essentials");
 
 describe("redis connection testing", () => {
   let redisConnectionResource1;
@@ -118,4 +121,84 @@ describe("redis connection testing", () => {
       done();
     }, 1000);
   });
+
+  it("Pre test communication", done => {
+    redis.setInstanceId("test2");
+    return redisConnectionResource1
+      .reserve("rid2")
+      .chain(() => {
+        redis.setInstanceId("test");
+        return routers.testInfra("rid2", {
+          status: code => console.log("status is ", code),
+          send: obj => {
+            console.log("sending response", obj);
+          }
+        });
+      })
+      .fork(
+        err => {
+          console.log("test end with ERROR", err);
+          setTimeout(done, 4000);
+        },
+        requestHandledInThisInstance => {
+          if (requestHandledInThisInstance) {
+            console.log("test end");
+          }
+          setTimeout(done, 2000);
+        }
+      );
+  }).timeout(4000);
+  /*
+  it("Test communication between two server instances", done => {
+    //Only reserve rid2 for instance test2 for one of the tests
+    redis.setInstanceId("test2");
+    redisConnectionResource1
+      .reserve("rid2")
+      .chain(() => {
+        redis.setInstanceId("test");
+        let childProc = cp.spawn("node", ["routers.js"], {
+          env: { PORT: 3001, INSTANCE_ID: "test2" },
+          cwd: "/home/ssashita/nodejs_horizontal_scaling_using_redis"
+        });
+
+        childProc.stdout.on("data", chunk => {
+          console.log("From child proc-stdout");
+          var str = Buffer.from(chunk, "UTF8").toString();
+          console.log(str);
+          if (str.indexOf("connected for redisChatPublisherConnection") > 0) {
+            routers
+              .testInfra("rid2", {
+                status: code => console.log("status is ", code),
+                send: obj => {
+                  console.log("sending response", obj);
+                }
+              })
+              .fork(
+                err => {
+                  setTimeout(done, 4000);
+                },
+                reply => {
+                  setTimeout(done, 4000);
+                }
+              );
+          }
+        });
+
+        childProc.stderr.on("data", chunk => {
+          console.log("From child proc-stderr");
+          console.log(Buffer.from(chunk, "UTF8").toString());
+        });
+
+        return Task.of(true);
+      })
+      .fork(
+        err => {
+          console.log(err);
+        },
+        reply => {
+          console.log("test end");
+        }
+      );
+  }).timeout(10000);
+  */
 });
